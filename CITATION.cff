@@ -1,9 +1,9 @@
 cff-version: 1.2.0
 message: "If you use this software in academic work, please cite the repository release and the associated methodology paper when available."
-title: "APEX-PulseLoss"
+title: "magnetloss-calculation"
 version: 0.1.0
 type: software
 license: BSD-3-Clause
 date-released: 2026-10-04
 authors:
-  - name: "APEX contributors"
+  - name: "hery rainforeset"

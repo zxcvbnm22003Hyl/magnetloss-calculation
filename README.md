@@ -1,118 +1,197 @@
-# APEX-PulseLoss
+# magnetloss-calculation
 
-**APEX-PulseLoss** is a pure-Python research code for magnetic-field calculation and AC-loss estimation in fast pulsed solenoids made from electrically insulated, high-purity metallic multifilament conductors.
+Pure-Python tools for magnetic-field calculation and pulsed-loss estimation in high-field solenoids using electrically insulated multifilament metallic conductors.
 
-The repository contains four independent model levels:
+**Author:** hery rainforeset
 
-1. **Finite-cross-section Biot–Savart magnet model** for the 162-turn APEX Phase-I solenoid.
-2. **Single-strand finite magnetic penetration model** for a round metallic strand in transverse pulsed field.
+The repository was developed around the APEX Phase-I pulsed-solenoid reference case, but the numerical components are separated so that the field solver, single-strand diffusion model, explicit multifilament FEM, surrogate model, and whole-magnet mapping can be used independently.
+
+## What is included
+
+The code contains four model levels:
+
+1. **Finite-cross-section Biot–Savart solver** for axisymmetric solenoids.
+2. **Single-strand finite magnetic-penetration model** for a round metallic strand in transverse pulsed field.
 3. **Explicit 2-D P1 multifilament FEM** for 1, 19, or 304 electrically insulated strands.
-4. **304-strand loss surrogate + whole-magnet mapping** with per-turn Gauss sampling and optional adiabatic temperature feedback.
+4. **304-strand loss surrogate + whole-magnet mapping** with Gauss sampling and optional adiabatic thermal feedback.
 
-No MATLAB, COMSOL, GetDP, or proprietary solver is required.
+The current package is entirely Python-based and does not require proprietary multiphysics software.
 
-> Status: research prototype / reproducible numerical model. It is not a certified engineering or safety-analysis package.
+## Reference magnet
 
-## Physical scope
+The default reference geometry is:
 
-The default reference configuration is the APEX Phase-I pulsed solenoid:
+| Parameter | Value |
+|---|---:|
+| Double pancakes | 9 |
+| Single pancakes | 18 |
+| Radial turns per SP | 9 |
+| Total turns | 162 |
+| Inner radius | 125 mm |
+| Outer radius | 215.7 mm |
+| Active axial length | 332.7 mm |
+| Cable envelope | 8.3 mm × 16.9 mm |
+| Peak current | 47.29 kA |
+| Pulse | 3 ms rise / 1 ms flat / 3 ms decay |
+| Strand diameter | 0.2 mm |
+| Strands per turn | 2432 |
+| Effective RRR model | 3000 |
 
-- 9 double pancakes = 18 single pancakes
-- 9 radial turns per single pancake
-- 162 total turns
-- `Ri = 125 mm`, `Ro = 215.7 mm`
-- active axial length `332.7 mm`
-- cable envelope `8.3 mm x 16.9 mm` (radial x axial)
-- peak current `47.29 kA`
-- 3 ms rise / 1 ms flat / 3 ms decay trapezoid
-- 2432 x 0.2 mm electrically insulated high-purity Al strands per turn
-- bundled material table based on an RRR=3000 design model
-
-The explicit 304-strand local model represents one secondary subcable:
+The modeled conductor hierarchy is
 
 ```text
-0.2 mm strand -> 19-strand primary -> 16 primaries -> 304-strand secondary
-                                                   -> x8 -> 2432-strand turn cable
+0.2 mm strand
+    -> 19-strand primary subcable
+    -> 16 primary subcables = 304-strand secondary subcable
+    -> 8 secondary subcables = 2432-strand turn cable
 ```
 
-Inter-strand electrical coupling loss is **not** included in the default models because strands are assumed electrically insulated.
+The default model assumes electrical insulation between strands and therefore excludes inter-strand coupling-current loss.
 
 ## Model hierarchy
 
-### 1. Finite rectangular-turn Biot–Savart model
+### 1. Finite rectangular-turn Biot–Savart field solver
 
-Each macro turn is treated as a rectangular current-density domain and integrated as a continuum of circular loops with tensor-product Gauss–Legendre quadrature.
+Each macroscopic turn is represented as a rectangular current-density region. Its field is integrated as a continuum of circular current loops using tensor-product Gauss–Legendre quadrature.
 
-This avoids the self-field singularity that occurs when the field is evaluated at the center of a zero-thickness filamentary turn.
+This avoids the self-field singularity that appears if a turn is represented by a zero-thickness filament and the field is evaluated at the turn center.
 
-Reference result at `47.29 kA`:
+Current reference result at 47.29 kA:
 
 ```text
-B0 ≈ 20.1952 T
-maximum turn-center |B| ≈ 20.6301 T
+Center field B0                  ≈ 20.19523 T
+Maximum turn-center |B|          ≈ 20.63009 T
+```
+
+Main implementation:
+
+```text
+src/apexloss/field.py
 ```
 
 ### 2. Single-strand finite magnetic penetration
 
-`apexloss.strand_diffusion.SingleStrandDiffusion` solves the time-domain magnetic diffusion problem for the transverse `m=1` mode of a round strand.
+`SingleStrandDiffusion` solves the time-domain magnetic-diffusion problem for the transverse `m = 1` mode of a round strand.
 
-It is the refactored version of the original APEX single-strand penetration code and is intentionally kept independent of the 304-strand FEM.
-
-It can be compared directly against the complete-penetration expression
+This model retains finite penetration and the post-pulse diffusion tail. It is independent of the 304-strand FEM and is intended as a numerical benchmark against the complete-penetration approximation
 
 ```math
-Q_{\rm CP}
-=\int \frac{\pi a^4}{4\rho(B,T)}
-\left(\frac{dB}{dt}\right)^2dt.
+Q_{\mathrm{CP}}
+=
+\int
+\frac{\pi a^4}{4\rho(B,T)}
+\left(\frac{dB}{dt}\right)^2
+dt .
 ```
 
-The numerical diffusion model retains finite penetration and the post-pulse diffusion tail.
+Frozen regression case:
+
+```text
+d                         = 0.2 mm
+Bpk                       = 20.619192 T
+pulse                     = 3/1/3 ms
+radial cells              = 160
+time step                 = 1 us
+
+Q(0-7 ms)                 = 0.5810908 J/m
+Q(post-pulse tail)        = 0.00723958 J/m
+Q(total finite diffusion) = 0.5883304 J/m
+Q(complete penetration)   = 0.6083368 J/m
+```
+
+Main implementation:
+
+```text
+src/apexloss/strand_diffusion.py
+```
+
+The original standalone numerical script is retained in
+
+```text
+legacy/APEX_strand_dynamic_rho_diffusion.py
+```
+
+for provenance and result traceability.
 
 ### 3. Explicit 2-D multifilament FEM
 
-`apexloss.multifilament_fem.MultifilamentFEM` uses a scalar `A_z` magnetic-diffusion formulation on a triangular P1 mesh.
+The local multifilament model uses a scalar magnetic vector potential `A_z` with linear triangular P1 elements.
 
-For every electrically insulated strand, the strand-average electric field is projected out so that the net transport current is zero in field-only calculations. This isolates strand-internal eddy loss.
+Available conductor layouts:
 
-Predefined layouts:
+- one 0.2 mm strand;
+- one 19-strand `1+6+12` primary subcable;
+- one 304-strand secondary subcable.
 
-- one 0.2 mm strand
-- one 19-strand `1+6+12` primary subcable
-- one 304-strand `16 x 19` secondary subcable
+Each strand is electrically isolated. In field-only calculations, the strand-average electric-field mode is projected out independently for every strand, enforcing zero net transport current while retaining strand-internal eddy-current loops.
 
-The current implementation uses an embedded structured triangular mesh. It is intentionally simple and transparent; a body-fitted mesh would reduce the remaining geometric discretization error.
-
-### 4. Whole-magnet surrogate mapping
-
-The bundled database contains the 304-strand full-pulse FEM response on a grid of magnetic field and temperature. Directional dependence is represented as
-
-```math
-Q(\theta)=Q_{xx}\cos^2\theta+Q_{yy}\sin^2\theta
-+2Q_{xy}\sin\theta\cos\theta.
-```
-
-For whole-magnet calculations, each macro turn is sampled using Gauss points over its cross section. The default is `2 x 2 = 4` points per turn, so the 162-turn magnet uses 648 macro field points.
-
-A fixed-temperature whole-magnet loss calculation is therefore
+Main implementation:
 
 ```text
-162 finite turns
-  -> 648 local (Br, Bz) points
-  -> 304-strand surrogate
-  -> x8 secondary subcables
-  -> integrate over each turn length
-  -> whole-magnet loss
+src/apexloss/multifilament_fem.py
 ```
 
-The package also provides a fast adiabatic thermal mapper derived from the full-pulse surrogate. This is a reduced-order reconstruction and should not be confused with the fully state-resolved 304-strand transient FEM.
+The current mesh is an embedded structured triangular mesh rather than a body-fitted mesh. The remaining geometric discretization error should therefore be treated as part of the model uncertainty.
+
+### 4. 304-strand surrogate and whole-magnet mapping
+
+The bundled surrogate stores the full-pulse 304-strand response versus peak field and temperature.
+
+Field-direction dependence is represented as
+
+```math
+Q(\theta)
+=
+Q_{xx}\cos^2\theta
++
+Q_{yy}\sin^2\theta
++
+2Q_{xy}\sin\theta\cos\theta .
+```
+
+For the full magnet, each turn cross section is sampled using Gauss points. The default is `2 × 2`, giving
+
+```text
+162 turns × 4 Gauss points = 648 macro field points
+```
+
+The whole-magnet calculation is therefore
+
+```text
+finite-turn Biot–Savart
+    -> local Br, Bz at 648 Gauss points
+    -> 304-strand surrogate
+    -> ×8 secondary subcables
+    -> integrate over each turn
+    -> total magnet loss
+```
+
+For the current geometry, 2×2, 3×3, and 4×4 turn-cross-section sampling are already converged relative to the uncertainty of the local loss model.
+
+## Current reference results
+
+These values are regression targets for the current release, not uncertainty-free engineering truth.
+
+| Quantity | Current reference |
+|---|---:|
+| Center field | 20.19523 T |
+| Max turn-center field | 20.63009 T |
+| Whole-magnet fixed-4.2 K intrinsic strand eddy loss | ~73.4 kJ/pulse |
+| Older 648-point single-strand spatial-RVE eddy loss with thermal feedback | 18.8466 kJ/pulse |
+| 304-strand reduced-order thermal result | ~19.9–20.3 kJ/pulse |
+| Transport Joule heat in the current thermal model | ~2.3 kJ/pulse |
+| End mean temperature | ~35.8 K |
+| End local maximum temperature | ~47 K |
+
+The disagreement between independent local models is kept explicitly as model-form uncertainty rather than removed by calibration.
 
 ## Installation
 
-Clone the repository and install in editable mode:
+Python 3.10 or later is recommended.
 
 ```bash
-git clone <your-repository-url>
-cd APEX-PulseLoss
+git clone https://github.com/zxcvbnm22003Hyl/magnetloss-calculation.git
+cd magnetloss-calculation
 python -m pip install -e .
 ```
 
@@ -123,9 +202,9 @@ python -m pip install -e .[dev]
 pytest -q
 ```
 
-## Command-line examples
+## Command-line usage
 
-### Magnet field
+### Magnetic field
 
 ```bash
 apexloss field --out turn_fields.csv
@@ -133,129 +212,170 @@ apexloss field --out turn_fields.csv
 
 ### Single-strand finite penetration
 
-Tabulated `rho(T,B)`:
+Using the bundled tabulated material model:
 
 ```bash
-apexloss strand --Bpk 20.619192 --temperature 4.2 --nr 160 --dt-us 1
+apexloss strand \
+  --Bpk 20.619192 \
+  --temperature 4.2 \
+  --nr 160 \
+  --dt-us 1
 ```
 
-Legacy 4.2 K Kohler/RRR model used by the original validation script:
+Using the legacy 4.2 K Kohler/RRR law used for the frozen validation case:
 
 ```bash
-apexloss strand --Bpk 20.619192 --nr 160 --dt-us 1 --legacy-kohler
+apexloss strand \
+  --Bpk 20.619192 \
+  --nr 160 \
+  --dt-us 1 \
+  --legacy-kohler
 ```
 
 ### Explicit 304-strand FEM
 
 ```bash
-apexloss secondary-fem --Bpk 20.619192 --temperature 4.2 --h-mm 0.03 --dt-ms 0.25
+apexloss secondary-fem \
+  --Bpk 20.619192 \
+  --temperature 4.2 \
+  --h-mm 0.03 \
+  --dt-ms 0.25
 ```
-
-This calculation is substantially more expensive than surrogate lookup.
 
 ### Whole-magnet fixed-temperature loss
 
 ```bash
-apexloss whole-magnet --mode fixed --temperature 4.2 --target-order 2 --outdir output_fixed
+apexloss whole-magnet \
+  --mode fixed \
+  --temperature 4.2 \
+  --target-order 2 \
+  --outdir output_fixed
 ```
 
-### Whole-magnet adiabatic reduced-order calculation
+### Whole-magnet adiabatic thermal mapping
 
 ```bash
-apexloss whole-magnet --mode thermal --temperature 4.2 --target-order 2 --dt-us 20 --outdir output_thermal
+apexloss whole-magnet \
+  --mode thermal \
+  --temperature 4.2 \
+  --target-order 2 \
+  --dt-us 20 \
+  --outdir output_thermal
 ```
 
-## Python API examples
+## Python API
+
+Magnetic field:
 
 ```python
 from apexloss import MagnetGeometry, FiniteTurnBiotSavart
 
-field = FiniteTurnBiotSavart(MagnetGeometry(), current_A=47.29e3, source_order=20)
+field = FiniteTurnBiotSavart(
+    MagnetGeometry(),
+    current_A=47.29e3,
+    source_order=20,
+)
+
 print(field.center_field_T())
 turns = field.turn_center_fields()
 ```
 
-Single-strand penetration:
+Single-strand magnetic diffusion:
 
 ```python
 from apexloss import SingleStrandDiffusion
+from apexloss.materials import LegacyKohlerRRR
 
-model = SingleStrandDiffusion(diameter_m=0.2e-3, radial_cells=160)
-result = model.simulate_trapezoid(B_peak_T=20.619192, dt_s=1e-6)
+model = SingleStrandDiffusion(
+    diameter_m=0.2e-3,
+    radial_cells=160,
+)
+
+result = model.simulate_trapezoid(
+    B_peak_T=20.619192,
+    dt_s=1e-6,
+    tail_s=23e-3,
+    resistivity=LegacyKohlerRRR(),
+)
+
 print(result.Q_total_J_per_m)
 ```
 
-304-strand explicit FEM:
+Explicit 304-strand FEM:
 
 ```python
 from apexloss.multifilament_fem import MultifilamentFEM
 
-fem = MultifilamentFEM.secondary304(mesh_h_m=0.03e-3)
-result = fem.run_trapezoid(B_peak_T=20.619192, temperature_K=4.2, dt_s=0.25e-3)
+fem = MultifilamentFEM.secondary304(
+    mesh_h_m=0.03e-3
+)
+
+result = fem.run_trapezoid(
+    B_peak_T=20.619192,
+    temperature_K=4.2,
+    dt_s=0.25e-3,
+)
+
 print(result.energy_J_per_m)
 ```
-
-## Reference numerical results
-
-The `reference_results/` directory freezes the current validation state. Representative values are:
-
-```text
-finite-turn Biot-Savart center field        ~20.1952 T
-fixed-4.2 K whole-magnet 304-surrogate loss ~73.4 kJ/pulse (2x2+ Gauss converged)
-old 648-point single-strand spatial RVE      18.8466 kJ eddy loss with thermal feedback
-304-strand reduced-order thermal model       ~19.9-20.3 kJ eddy loss depending on time-history reconstruction
-```
-
-The difference between the independent local models is useful as a model-form uncertainty estimate; it should not be hidden by artificial tuning.
-
-## Important assumptions and limitations
-
-- strands are electrically insulated; no inter-strand or inter-subcable coupling-current loss is included
-- no helicoidal transformation or explicit twist-pitch physics is included in v0.1.0
-- no structural-metal eddy-current loss
-- no joint/lead loss
-- adiabatic single-pulse thermal response only
-- the bundled compact `rho0(T)` curve plus Kohler reconstruction is a design model; the 20.5 T upper bound is especially important when interpreting higher-field points
-- the 304-strand FEM uses a non-body-fitted embedded mesh
-- the fast thermal surrogate reconstructs an instantaneous loss coefficient from full-pulse data and is therefore reduced-order, not a replacement for a fully state-resolved local transient FEM
-
-See `docs/model_assumptions.md` for details.
 
 ## Repository layout
 
 ```text
 src/apexloss/
-  field.py                 finite rectangular-turn Biot-Savart
-  strand_diffusion.py      single-strand finite penetration
-  multifilament_fem.py     explicit 1/19/304-strand 2-D FEM
-  surrogate.py             304-strand full-pulse surrogate
-  whole_magnet.py          162-turn field-to-loss mapping
-  materials.py             rho(T,B), heat capacity and enthalpy
-  geometry.py              magnet geometry
-  waveforms.py             pulse definitions
-  data/                    bundled material/surrogate data
+    field.py                 finite rectangular-turn Biot–Savart
+    strand_diffusion.py      single-strand finite penetration
+    multifilament_fem.py     explicit 1/19/304-strand 2-D FEM
+    surrogate.py             304-strand loss surrogate
+    whole_magnet.py          162-turn field-to-loss mapping
+    materials.py             rho(T,B), heat capacity, enthalpy
+    geometry.py              reference magnet geometry
+    waveforms.py             pulse definitions
+    data/                    bundled material and surrogate data
 
-examples/                  executable examples
-legacy/                    original pure-Python scripts retained verbatim
-reference_results/         frozen validation outputs
-tests/                     regression/unit tests
-configs/                   reference configuration
+examples/                    executable examples
+legacy/                      original Python models retained for provenance
+reference_results/           frozen regression results
+tests/                       unit and regression tests
+configs/                     reference configuration
+docs/                        numerical-method and validation notes
 ```
 
-## Reproducibility and provenance
+## Reproducibility
 
-The `legacy/` directory contains the original pure-Python single-strand magnetic-diffusion and full-magnet spatial-RVE scripts from which parts of the refactored package were derived. They are retained for result traceability.
+Run the compact validation script:
 
-The refactored code intentionally separates:
+```bash
+python scripts/validate_reference.py
+```
 
-- macro magnetic field computation
-- local strand/multifilament physics
-- material constitutive data
-- thermal feedback
-- whole-magnet quadrature/mapping
+The repository also includes GitHub Actions CI for supported Python versions.
 
-This makes each level independently testable.
+## Main assumptions and limitations
+
+- strands are electrically insulated;
+- inter-strand and inter-subcable coupling-current loss is not included;
+- real twist-pitch geometry and helicoidal transformation are not included in v0.1.0;
+- structural-metal eddy-current loss is not included;
+- joints and leads are not included;
+- the thermal model is adiabatic for one pulse;
+- the high-purity-Al resistivity model is a design model and should eventually be replaced by measured finished-strand/cable data;
+- the 304-strand FEM currently uses an embedded, non-body-fitted mesh;
+- the fast thermal surrogate is reduced-order and does not retain the complete local electromagnetic state history.
+
+See:
+
+- [Numerical methods](docs/numerical_methods.md)
+- [Model assumptions](docs/model_assumptions.md)
+- [Validation snapshot](docs/validation.md)
+- [中文说明](docs/README_zh-CN.md)
+
+## Citation
+
+If this code is used in academic work, cite the repository release and the associated methodology paper when available.
 
 ## License
 
-BSD-3-Clause. Update the copyright holder in `LICENSE` and the author metadata in `CITATION.cff` before a public release if needed.
+BSD-3-Clause.
+
+Copyright © 2026 hery rainforeset.
