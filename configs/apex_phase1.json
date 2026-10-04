@@ -1,0 +1,34 @@
+{
+  "magnet": {
+    "n_dp": 9,
+    "n_radial": 9,
+    "inner_radius_m": 0.125,
+    "cable_radial_m": 0.0083,
+    "cable_axial_m": 0.0169,
+    "radial_gap_m": 0.002,
+    "dp_internal_gap_m": 0.0005,
+    "inter_dp_gap_m": 0.003,
+    "current_peak_A": 47290.0
+  },
+  "conductor": {
+    "strand_diameter_m": 0.0002,
+    "strands_per_primary": 19,
+    "primary_per_secondary": 16,
+    "secondary_per_tertiary": 8,
+    "total_strands_per_turn": 2432,
+    "RRR_model": 3000
+  },
+  "pulse": {
+    "rise_s": 0.003,
+    "flat_s": 0.001,
+    "decay_s": 0.003
+  },
+  "numerics": {
+    "field_source_gauss_order": 20,
+    "whole_magnet_target_gauss_order": 2,
+    "strand_diffusion_radial_cells": 160,
+    "strand_diffusion_dt_s": 1e-6,
+    "secondary_fem_mesh_h_m": 3e-5,
+    "secondary_fem_dt_s": 0.00025
+  }
+}
