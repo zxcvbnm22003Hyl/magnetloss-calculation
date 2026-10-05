@@ -353,11 +353,11 @@ T \uparrow
 | 完全穿透 CP + \(\rho(B,T)\) 热反馈总损耗 | 20.959 kJ/pulse |
 | Robin–Bessel modal + \(\rho(B,T)\) 热反馈本征涡流 | 18.518 kJ/pulse |
 | Robin–Bessel modal + \(\rho(B,T)\) 热反馈输运焦耳热 | 2.189 kJ/pulse |
-| **Robin–Bessel modal 整磁体总损耗** | **20.707 kJ/pulse** |
+| **Robin–Bessel modal 整磁体总损耗（含 C3(B) 微小修正）** | **约 20.73 kJ/pulse** |
 | 旧 648 点单丝 spatial-RVE 总损耗 | 21.064 kJ/pulse |
 | 304/2432 reduced-order surrogate 总损耗 | 约 22.96 kJ/pulse（保留为模型形式差异，继续核查） |
 
-不同局部模型之间的差异被保留为**模型形式不确定度**，而不是通过人为调参消除。当前动态主路径优先采用 Robin–Bessel 有限穿透模型；304/2432 丝显式 FEM 用于局部高精度校核，旧 surrogate 热重构保留用于对照。
+不同局部模型之间的差异被保留为**模型形式不确定度**，而不是通过人为调参消除。当前动态主路径优先采用 Robin–Bessel 有限穿透模型；304/2432 丝显式 FEM 用于局部高精度校核，旧 surrogate 热重构保留用于对照。5–20.5 T 场强扫描中，Robin–Bessel 与时间步外推后的 304 丝显式 FEM 总损耗最大偏差约 0.56%；三级 2432/304 修正仅约 0.03–0.14%。
 
 ---
 
