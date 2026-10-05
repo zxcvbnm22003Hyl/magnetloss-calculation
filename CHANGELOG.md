@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-10-05
+
+- add Robin–Bessel finite-penetration modal strand solver
+- add state-resolved whole-magnet modal thermal mapper
+- expose `whole-magnet --mode modal-thermal`
+- validate modal strand loss against the radial diffusion reference
+- add hotspot 2432-strand FEM and whole-magnet comparison references
+
+
 ## 0.1.0 — 2026-10-04
 
 Initial public-code package structure.
