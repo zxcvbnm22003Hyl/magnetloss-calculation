@@ -63,7 +63,7 @@ class RobinBesselStrand:
         rho = np.asarray(rho_ohm_m, dtype=float)
         return (
             MU0 * self.radius_m**2
-            / (rho[..., None] * self.lambda_n[None, ...] ** 2)
+            / (rho[..., None] * self.lambda_n**2)
         )
 
     def step(self, state, dt_s, dBdt_T_s, rho_ohm_m):
