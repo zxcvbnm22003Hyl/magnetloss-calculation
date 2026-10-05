@@ -49,3 +49,43 @@ The 2x2, 3x3 and 4x4 macro cross-section integrations are effectively converged 
 The fast surrogate-based adiabatic model gives a whole-magnet intrinsic eddy loss around 19.9 kJ/pulse and transport Joule heat around 2.3 kJ/pulse for the current baseline.
 
 An independent older 648-point single-strand spatial-RVE model gives 18.8466 kJ/pulse eddy loss. The difference is retained as model-form disagreement rather than removed by calibration.
+
+
+## Robin-Bessel modal validation
+
+Using the same 0.2 mm strand, 20.619192 T peak field and 3/1/3 ms trapezoid as the radial diffusion regression:
+
+```text
+20-mode Robin-Bessel, dt=1 us:
+Q(0-7 ms)   = 0.5810597 J/m
+Q(7-30 ms)  = 0.00724007 J/m
+Q(total)    = 0.5882998 J/m
+
+160-cell radial diffusion:
+Q(total)    = 0.5883304 J/m
+```
+
+The total-energy difference is approximately -0.005%.
+
+For the dynamic hotspot tertiary cable with the same rho(B,T) and adiabatic enthalpy model:
+
+```text
+complete penetration     = 276.139 J/m
+Robin-Bessel modal       = 274.718 J/m
+explicit 2432-strand FEM = 273.749 J/m
+```
+
+The modal result is about 0.35% above the explicit 2432-strand FEM result.
+
+## Whole-magnet dynamic comparison
+
+For the 162-turn APEX reference magnet, 2x2 Gauss sampling per turn and the RRR3000 rho(B,T) model:
+
+```text
+complete penetration + thermal feedback = 20.959 kJ/pulse
+Robin-Bessel modal + thermal feedback    = 20.707 kJ/pulse
+old 648-point spatial-RVE                = 21.064 kJ/pulse
+304/2432 reduced-order surrogate chain   = 22.958 kJ/pulse
+```
+
+The first three independent state-resolved/strand-resolved approaches cluster around 20.7--21.1 kJ/pulse. The higher surrogate-chain value is retained as model-form disagreement and should not be removed by calibration; its dynamic state reconstruction remains under review.
