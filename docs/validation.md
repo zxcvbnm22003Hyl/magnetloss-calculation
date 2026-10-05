@@ -89,3 +89,45 @@ old 648-point spatial-RVE                = 21.064 kJ/pulse
 ```
 
 The first three independent state-resolved/strand-resolved approaches cluster around 20.7--21.1 kJ/pulse. The higher surrogate-chain value is retained as model-form disagreement and should not be removed by calibration; its dynamic state reconstruction remains under review.
+
+
+## Field-strength validation scan
+
+The dynamic rho(B,T) model was checked at 5, 10, 15 and 20.5 T. The explicit
+304-strand FEM used 31.25 and 62.5 us time steps and was first-order
+Richardson-extrapolated to dt -> 0. The Robin-Bessel model used 12 modes and a
+2 us time step.
+
+| Bpk (T) | FEM304 total (J/m) | modal total (J/m) | modal - FEM |
+|---:|---:|---:|---:|
+| 5.0  | 7.446686  | 7.405439  | -0.554% |
+| 10.0 | 16.488514 | 16.455709 | -0.199% |
+| 15.0 | 25.057773 | 25.049136 | -0.034% |
+| 20.5 | 34.134005 | 34.150586 | +0.049% |
+
+Thus the maximum absolute modal/FEM discrepancy across 5--20.5 T is about
+0.56%, with no systematic high-field divergence.
+
+A direct 2432-strand / 304-strand paired calculation gives
+
+| Bpk (T) | C3_total = Q2432 / (8 Q304) |
+|---:|---:|
+| 5.0  | 1.001405 |
+| 10.0 | 1.000381 |
+| 15.0 | 1.000270 |
+| 20.5 | 1.000628 |
+
+With matched conductor quadrature and discretization, the tertiary magnetic
+interaction correction is therefore only about 0.03--0.14% over the scanned
+field range. The larger tertiary corrections obtained in earlier exploratory
+runs were dominated by mismatched conductor-integration / mesh formulations.
+
+Applying C3(B) to the 162-turn Robin-Bessel whole-magnet result changes the
+total pulse loss only from about 20.717 kJ to 20.729 kJ, i.e. +0.055%.
+The recommended current whole-magnet value is therefore
+
+```text
+Qmag ≈ 20.73 kJ/pulse
+```
+
+under the present insulated-strand, adiabatic, rho(B,T) model assumptions.
