@@ -30,6 +30,30 @@
     "robin_bessel_transport_kJ": 2.188765,
     "robin_bessel_total_kJ": 20.707169,
     "old_spatial_RVE_total_kJ": 21.063699,
-    "reduced_order_surrogate_total_kJ": 22.958453
+    "reduced_order_surrogate_total_kJ": 22.958453,
+    "C3_corrected_total_kJ": 20.728552,
+    "C3_correction_percent": 0.054917,
+    "recommended_total_kJ": 20.73
+  },
+  "field_strength_validation": {
+    "fields_T": [
+      5,
+      10,
+      15,
+      20.5
+    ],
+    "max_abs_modal_vs_FEM304_total_percent": 0.553904,
+    "modal_vs_FEM304_total_percent": [
+      -0.553904,
+      -0.198955,
+      -0.034469,
+      0.048577
+    ],
+    "tertiary_C3_total": [
+      1.001405,
+      1.000381,
+      1.00027,
+      1.000628
+    ]
   }
 }
