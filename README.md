@@ -8,6 +8,7 @@
 
 - 轴对称多匝螺线管磁场计算；
 - 单根圆丝的有限磁扩散 / 非完全穿透计算；
+- Robin–Bessel 有限穿透模态模型；
 - 1 丝、19 丝、304 丝二维显式有限元计算；
 - 二级子缆损耗 surrogate；
 - 整磁体逐匝损耗映射；
@@ -129,7 +130,73 @@ legacy/APEX_strand_dynamic_rho_diffusion.py
 
 ---
 
-### 2.3 1 / 19 / 304 丝二维显式 FEM
+### 2.3 Robin–Bessel 有限穿透模态模型
+
+为了保留完全穿透公式的计算速度，同时加入有限磁扩散的内部状态记忆，当前版本新增 Robin–Bessel 模态模型。
+
+对于圆丝横向磁场，正确的外部真空场匹配条件为：
+
+```math
+f(a)+a f'(a)=2aB_{\rm ext}
+```
+
+因此本征值满足：
+
+```math
+J_0(\lambda_n)=0
+```
+
+模态状态满足：
+
+```math
+\dot q_n+\frac{q_n}{\tau_n}
+=
+-\beta_n\dot B
+```
+
+其中：
+
+```math
+\tau_n
+=
+\frac{\mu_0a^2}{\rho(B,T)\lambda_n^2},
+\qquad
+\beta_n
+=
+\frac{4}{\lambda_n^2J_1(\lambda_n)}
+```
+
+瞬时单丝损耗为：
+
+```math
+P'_{\rm eddy}
+=
+\frac{\pi a^4}{2\rho}
+\sum_n
+J_1^2(\lambda_n)
+\left(
+\frac{q_n}{\tau_n}
+\right)^2
+```
+
+在快速磁扩散极限，该式严格退化为完全穿透公式：
+
+```math
+P'_{\rm CP}
+=
+\frac{\pi a^4}{4\rho}
+\dot B^2
+```
+
+主要代码：
+
+```text
+src/apexloss/modal_diffusion.py
+```
+
+当前 0.2 mm 单丝回归中，Robin–Bessel 模态模型与 160 径向网格有限差分总损耗的差异约为 (10^{-2}\%\) 量级。对于热点三级总缆的动态 \(\rho(B,T)\) 工况，模态模型与 2432 丝显式 FEM 的总损耗差约 0.35%。
+
+### 2.4 1 / 19 / 304 丝二维显式 FEM
 
 局部多丝模型采用二维标量磁矢势 `A_z` 形式，并使用 P1 三角形线性有限元。
 
@@ -167,7 +234,7 @@ Q_{\rm intra-filament}
 
 ---
 
-### 2.4 304 丝二级子缆 surrogate
+### 2.5 304 丝二级子缆 surrogate
 
 为了避免对整个磁体中数十万根细丝进行直接有限元建模，程序将 304 丝二级子缆的完整 FEM 结果参数化为局部损耗 surrogate。
 
@@ -283,13 +350,14 @@ T \uparrow
 | 中心场 | 20.19523 T |
 | 最大匝中心磁场 | 20.63009 T |
 | 固定 4.2 K 整磁体本征细丝涡流损耗 | 约 73.4 kJ/pulse |
-| 旧 648 点单丝 spatial-RVE 热反馈涡流损耗 | 18.8466 kJ/pulse |
-| 304 丝 reduced-order 热反馈涡流损耗 | 约 19.9–20.3 kJ/pulse |
-| 当前输运焦耳热 | 约 2.3 kJ/pulse |
-| 脉冲结束平均温度 | 约 35.8 K |
-| 脉冲结束局部最高温度 | 约 47 K |
+| 完全穿透 CP + \(\rho(B,T)\) 热反馈总损耗 | 20.959 kJ/pulse |
+| Robin–Bessel modal + \(\rho(B,T)\) 热反馈本征涡流 | 18.518 kJ/pulse |
+| Robin–Bessel modal + \(\rho(B,T)\) 热反馈输运焦耳热 | 2.189 kJ/pulse |
+| **Robin–Bessel modal 整磁体总损耗** | **20.707 kJ/pulse** |
+| 旧 648 点单丝 spatial-RVE 总损耗 | 21.064 kJ/pulse |
+| 304/2432 reduced-order surrogate 总损耗 | 约 22.96 kJ/pulse（保留为模型形式差异，继续核查） |
 
-不同局部模型之间的差异被保留为**模型形式不确定度**，而不是通过人为调参消除。
+不同局部模型之间的差异被保留为**模型形式不确定度**，而不是通过人为调参消除。当前动态主路径优先采用 Robin–Bessel 有限穿透模型；304/2432 丝显式 FEM 用于局部高精度校核，旧 surrogate 热重构保留用于对照。
 
 ---
 
@@ -373,7 +441,7 @@ apexloss whole-magnet \
 
 ---
 
-### 7.5 整磁体绝热热反馈
+### 7.5 整磁体快速 surrogate 热反馈
 
 ```bash
 apexloss whole-magnet \
@@ -383,6 +451,21 @@ apexloss whole-magnet \
   --dt-us 20 \
   --outdir output_thermal
 ```
+
+### 7.6 整磁体 Robin–Bessel 动态热反馈（推荐）
+
+```bash
+apexloss whole-magnet \
+  --mode modal-thermal \
+  --temperature 4.2 \
+  --target-order 2 \
+  --dt-us 5 \
+  --n-modes 12 \
+  --tail-ms 0 \
+  --outdir output_modal
+```
+
+当前整磁体比较约定积分 0–7 ms 驱动脉冲，因此默认 `tail-ms=0`。若需要把电流归零后的残余磁扩散尾项计入，可显式设置正的 `--tail-ms`。
 
 ---
 
@@ -430,7 +513,32 @@ print(result.Q_total_J_per_m)
 
 ---
 
-### 8.3 304 丝显式 FEM
+### 8.3 Robin–Bessel 模态整磁体
+
+```python
+from apexloss import MagnetGeometry, FiniteTurnBiotSavart
+from apexloss.whole_magnet import ModalThermalMapper
+
+field = FiniteTurnBiotSavart(
+    MagnetGeometry(),
+    current_A=47.29e3,
+    source_order=20,
+)
+
+mapper = ModalThermalMapper(n_modes=12)
+samples, turns, history, summary = mapper.run(
+    field,
+    target_order=2,
+    dt_s=5e-6,
+    initial_temperature_K=4.2,
+)
+
+print(summary)
+```
+
+---
+
+### 8.4 304 丝显式 FEM
 
 ```python
 from apexloss.multifilament_fem import MultifilamentFEM
@@ -459,6 +567,9 @@ src/apexloss/
 
     strand_diffusion.py
         单丝有限磁扩散 / 非完全穿透
+
+    modal_diffusion.py
+        Robin–Bessel 有限穿透模态模型
 
     multifilament_fem.py
         1 / 19 / 304 丝二维显式 FEM
@@ -531,7 +642,8 @@ python scripts/validate_reference.py
 - 当前高纯 Al `rho(T,B)` 仍属于设计级材料模型；
 - 最终工程计算应使用实际拉丝、绝缘和成缆后的实测材料参数；
 - 304 丝 FEM 使用非贴体嵌入式网格；
-- reduced-order 热 surrogate 不能完全替代具有内部磁扩散状态记忆的直接瞬态 FEM。
+- reduced-order 热 surrogate 不能完全替代具有内部磁扩散状态记忆的直接瞬态 FEM；
+- Robin–Bessel 模型假设圆形、直线、彼此绝缘的细丝，并以外部局部横向磁场驱动，不包含丝间耦合电流。
 
 进一步说明见：
 
