@@ -11,7 +11,7 @@ from .materials import LegacyKohlerRRR, ResistivityTable
 from .multifilament_fem import MultifilamentFEM
 from .strand_diffusion import SingleStrandDiffusion
 from .surrogate import SecondaryLossSurrogate
-from .whole_magnet import fixed_temperature_loss, QuasiStaticThermalMapper
+from .whole_magnet import fixed_temperature_loss, QuasiStaticThermalMapper, ModalThermalMapper
 
 
 def _write_summary(path, obj):
@@ -75,7 +75,7 @@ def cmd_whole(args):
         turns, Q = fixed_temperature_loss(field, surrogate, args.temperature, args.target_order)
         turns.to_csv(outdir / "turn_loss.csv", index=False)
         summary = {"Q_eddy_J": Q, "temperature_K": args.temperature, "mode": "fixed"}
-    else:
+    elif args.mode == "thermal":
         mapper = QuasiStaticThermalMapper(surrogate=surrogate)
         samples, turns, hist, result = mapper.run(
             field,
@@ -88,6 +88,24 @@ def cmd_whole(args):
         turns.to_csv(outdir / "turn_loss.csv", index=False)
         hist.to_csv(outdir / "time_history.csv", index=False)
         summary = result.__dict__ | {"mode": "quasistatic-thermal"}
+    else:
+        mapper = ModalThermalMapper(n_modes=args.n_modes)
+        samples, turns, hist, result = mapper.run(
+            field,
+            target_order=args.target_order,
+            dt_s=args.dt_us * 1e-6,
+            initial_temperature_K=args.temperature,
+            current_peak_A=args.current_kA * 1e3,
+            tail_s=args.tail_ms * 1e-3,
+        )
+        samples.to_csv(outdir / "local_samples.csv", index=False)
+        turns.to_csv(outdir / "turn_loss.csv", index=False)
+        hist.to_csv(outdir / "time_history.csv", index=False)
+        summary = result.__dict__ | {
+            "mode": "modal-thermal",
+            "n_modes": args.n_modes,
+            "tail_s": args.tail_ms * 1e-3,
+        }
     _write_summary(outdir / "summary.json", summary)
     print(json.dumps(summary, indent=2))
 
@@ -124,12 +142,14 @@ def build_parser():
     m.set_defaults(func=cmd_secondary)
 
     w = sub.add_parser("whole-magnet", help="Whole-magnet field-to-loss mapping")
-    w.add_argument("--mode", choices=["fixed", "thermal"], default="fixed")
+    w.add_argument("--mode", choices=["fixed", "thermal", "modal-thermal"], default="fixed")
     w.add_argument("--temperature", type=float, default=4.2)
     w.add_argument("--current-kA", type=float, default=47.29)
     w.add_argument("--source-order", type=int, default=20)
     w.add_argument("--target-order", type=int, default=2)
     w.add_argument("--dt-us", type=float, default=20.0)
+    w.add_argument("--n-modes", type=int, default=12)
+    w.add_argument("--tail-ms", type=float, default=0.0)
     w.add_argument("--outdir", default="apexloss_output")
     w.set_defaults(func=cmd_whole)
     return p
