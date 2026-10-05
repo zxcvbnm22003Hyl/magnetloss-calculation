@@ -5,6 +5,7 @@ from .materials import ResistivityTable, EnthalpyModel
 from .waveforms import TrapezoidPulse
 from .field import FiniteTurnBiotSavart
 from .strand_diffusion import SingleStrandDiffusion
+from .modal_diffusion import RobinBesselStrand
 from .surrogate import SecondaryLossSurrogate
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "TrapezoidPulse",
     "FiniteTurnBiotSavart",
     "SingleStrandDiffusion",
+    "RobinBesselStrand",
     "SecondaryLossSurrogate",
 ]
 
