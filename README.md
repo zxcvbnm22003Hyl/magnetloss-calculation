@@ -7,6 +7,7 @@
 本项目最初围绕 APEX Phase-I 脉冲高场磁体开展，但代码已经按物理层级拆分，可独立用于：
 
 - 轴对称多匝螺线管磁场计算；
+- 完全穿透（CP）解析基准模型；
 - 单根圆丝的有限磁扩散 / 非完全穿透计算；
 - Robin–Bessel 有限穿透模态模型；
 - 1 丝、19 丝、304 丝二维显式有限元计算；
@@ -78,7 +79,42 @@ Ipk = 47.29 kA
 
 ---
 
-### 2.2 单丝有限磁扩散 / 非完全穿透模型
+### 2.2 完全穿透（CP）解析模型
+
+完全穿透模型作为整个仓库的解析基准。对于半径为 (a) 的圆形正常导体细丝，在空间均匀横向时变磁场中：
+
+```math
+P'_{\rm CP}
+=
+\frac{\pi a^4}{4\rho(B,T)}
+\left(\frac{dB}{dt}\right)^2.
+```
+
+该模型没有内部磁扩散状态，因此是**无记忆模型**：理想平顶阶段和脉冲结束后只要 (dB/dt=0)，本征涡流功率立即为零。
+
+主要代码：
+
+```text
+src/apexloss/complete_penetration.py
+```
+
+整磁体动态版本由 `CompletePenetrationThermalMapper` 实现，并使用与 Robin–Bessel 模型相同的：
+
+- 162 匝有限截面 Biot–Savart；
+- 每匝 2×2 Gauss 点；
+- RRR3000 `rho(B,T)`；
+- 输运电流焦耳热；
+- 单脉冲绝热焓反馈。
+
+当前整磁体 CP 动态参考值为：
+
+```text
+Qeddy_CP      = 18.743 kJ/pulse
+Qtransport    =  2.216 kJ/pulse
+Qtotal_CP     = 20.959 kJ/pulse
+```
+
+### 2.3 单丝有限磁扩散 / 非完全穿透模型
 
 `SingleStrandDiffusion` 用于计算圆形金属细丝在横向脉冲磁场中的有限磁扩散过程。
 
@@ -130,7 +166,7 @@ legacy/APEX_strand_dynamic_rho_diffusion.py
 
 ---
 
-### 2.3 Robin–Bessel 有限穿透模态模型
+### 2.4 Robin–Bessel 有限穿透模态模型
 
 为了保留完全穿透公式的计算速度，同时加入有限磁扩散的内部状态记忆，当前版本新增 Robin–Bessel 模态模型。
 
@@ -196,7 +232,7 @@ src/apexloss/modal_diffusion.py
 
 当前 0.2 mm 单丝回归中，Robin–Bessel 模态模型与 160 径向网格有限差分总损耗的差异约为 (10^{-2}\%\) 量级。对于热点三级总缆的动态 \(\rho(B,T)\) 工况，模态模型与 2432 丝显式 FEM 的总损耗差约 0.35%。
 
-### 2.4 1 / 19 / 304 丝二维显式 FEM
+### 2.5 1 / 19 / 304 丝二维显式 FEM
 
 局部多丝模型采用二维标量磁矢势 `A_z` 形式，并使用 P1 三角形线性有限元。
 
@@ -234,7 +270,7 @@ Q_{\rm intra-filament}
 
 ---
 
-### 2.5 304 丝二级子缆 surrogate
+### 2.6 304 丝二级子缆 surrogate
 
 为了避免对整个磁体中数十万根细丝进行直接有限元建模，程序将 304 丝二级子缆的完整 FEM 结果参数化为局部损耗 surrogate。
 
@@ -391,7 +427,18 @@ apexloss field --out turn_fields.csv
 
 ---
 
-### 7.2 单丝有限磁扩散
+### 7.2 完全穿透单丝解析基准
+
+```bash
+apexloss strand-cp \
+  --Bpk 20.619192 \
+  --temperature 4.2 \
+  --diameter-mm 0.2 \
+  --dt-us 1 \
+  --legacy-kohler
+```
+
+### 7.3 单丝有限磁扩散
 
 使用当前材料表：
 
@@ -415,7 +462,7 @@ apexloss strand \
 
 ---
 
-### 7.3 304 丝二维 FEM
+### 7.4 304 丝二维 FEM
 
 ```bash
 apexloss secondary-fem \
@@ -429,7 +476,7 @@ apexloss secondary-fem \
 
 ---
 
-### 7.4 整磁体固定温度损耗
+### 7.5 整磁体固定温度损耗
 
 ```bash
 apexloss whole-magnet \
@@ -441,7 +488,7 @@ apexloss whole-magnet \
 
 ---
 
-### 7.5 整磁体快速 surrogate 热反馈
+### 7.6 整磁体快速 surrogate 热反馈
 
 ```bash
 apexloss whole-magnet \
@@ -452,7 +499,18 @@ apexloss whole-magnet \
   --outdir output_thermal
 ```
 
-### 7.6 整磁体 Robin–Bessel 动态热反馈（推荐）
+### 7.7 整磁体完全穿透 + 动态热反馈
+
+```bash
+apexloss whole-magnet \
+  --mode cp-thermal \
+  --temperature 4.2 \
+  --target-order 2 \
+  --dt-us 5 \
+  --outdir output_cp
+```
+
+### 7.8 整磁体 Robin–Bessel 动态热反馈（推荐）
 
 ```bash
 apexloss whole-magnet \
@@ -490,7 +548,23 @@ print(turns.head())
 
 ---
 
-### 8.2 单丝有限穿透
+### 8.2 完全穿透单丝
+
+```python
+from apexloss import CompletePenetrationStrand
+from apexloss.materials import LegacyKohlerRRR
+
+cp = CompletePenetrationStrand(diameter_m=0.2e-3)
+result = cp.simulate_trapezoid(
+    B_peak_T=20.619192,
+    dt_s=1e-6,
+    resistivity=LegacyKohlerRRR(),
+)
+
+print(result.Q_total_J_per_m)
+```
+
+### 8.3 单丝有限穿透
 
 ```python
 from apexloss import SingleStrandDiffusion
@@ -513,7 +587,7 @@ print(result.Q_total_J_per_m)
 
 ---
 
-### 8.3 Robin–Bessel 模态整磁体
+### 8.4 Robin–Bessel 模态整磁体
 
 ```python
 from apexloss import MagnetGeometry, FiniteTurnBiotSavart
@@ -538,7 +612,7 @@ print(summary)
 
 ---
 
-### 8.4 304 丝显式 FEM
+### 8.5 304 丝显式 FEM
 
 ```python
 from apexloss.multifilament_fem import MultifilamentFEM
@@ -634,7 +708,7 @@ python scripts/validate_reference.py
 - 默认细丝之间完全电绝缘；
 - 不包含丝间耦合电流损耗；
 - 不包含二级/三级子缆之间的有限接触电阻；
-- v0.1.0 暂不包含真实纽绞几何；
+- v0.1.x 暂不包含真实纽绞几何；
 - 暂不包含 Helicoidal Transformation；
 - 不包含结构金属涡流；
 - 不包含接头和引线损耗；
