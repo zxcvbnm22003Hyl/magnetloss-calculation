@@ -4,12 +4,30 @@ from __future__ import annotations
 import json
 import math
 
-from apexloss import MagnetGeometry, FiniteTurnBiotSavart, SingleStrandDiffusion, SecondaryLossSurrogate
+from apexloss import (
+    CompletePenetrationStrand,
+    MagnetGeometry,
+    FiniteTurnBiotSavart,
+    SingleStrandDiffusion,
+    SecondaryLossSurrogate,
+)
 from apexloss.materials import LegacyKohlerRRR
 from apexloss.whole_magnet import fixed_temperature_loss
 
 
 def main():
+    cp = CompletePenetrationStrand(0.2e-3)
+    cp_r = cp.simulate_trapezoid(
+        B_peak_T=20.619192,
+        dt_s=1e-6,
+        resistivity=LegacyKohlerRRR(),
+    )
+    assert math.isclose(
+        cp_r.Q_total_J_per_m,
+        0.6083367961,
+        rel_tol=2e-8,
+    )
+
     strand = SingleStrandDiffusion(0.2e-3, 160)
     r = strand.simulate_trapezoid(
         B_peak_T=20.619192, dt_s=1e-6, tail_s=23e-3, resistivity=LegacyKohlerRRR()
@@ -23,6 +41,7 @@ def main():
     assert math.isclose(q, 73335.74799, rel_tol=5e-4)
 
     print(json.dumps({
+        "CP_Qpulse_Jpm": cp_r.Q_pulse_J_per_m,
         "strand_Qpulse_Jpm": r.Q_pulse_J_per_m,
         "strand_Qtotal_Jpm": r.Q_total_J_per_m,
         "B0_T": field.center_field_T(),
