@@ -2,6 +2,27 @@
 
 The following values are frozen as regression references. They are not uncertainty-free engineering truth; they are numerical consistency targets for this release.
 
+## Complete-penetration code regression
+
+For a 0.2 mm strand, 20.619192 T peak field, 3/1/3 ms trapezoid, fixed 4.2 K
+legacy Kohler/RRR resistivity and `dt=1 us`, the dedicated
+`CompletePenetrationStrand` implementation gives
+
+```text
+Q_CP(0-7 ms) = 0.6083367961 J/m
+Q_CP(tail)   = 0
+```
+
+The whole-magnet complete-penetration mapper uses the same `rho(B,T)`,
+transport-current and adiabatic-enthalpy update as the other dynamic mappers.
+The frozen whole-magnet reference is
+
+```text
+Qeddy_CP     = 18.743193 kJ/pulse
+Qtransport   =  2.215772 kJ/pulse
+Qtotal_CP    = 20.958964 kJ/pulse
+```
+
 ## Single 0.2 mm strand finite penetration
 
 Conditions:
