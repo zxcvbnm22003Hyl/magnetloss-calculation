@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.interpolate import PchipInterpolator
 
 from .field import FiniteTurnBiotSavart
+from .complete_penetration import CompletePenetrationStrand
 from .materials import ResistivityTable, EnthalpyModel
 from .modal_diffusion import RobinBesselStrand
 from .surrogate import SecondaryLossSurrogate
@@ -196,6 +197,153 @@ class QuasiStaticThermalMapper:
         )
         return s, turns, hist, summary
 
+
+
+class CompletePenetrationThermalMapper:
+    """Whole-magnet complete-penetration baseline with rho(B,T) feedback.
+
+    This mapper evaluates the memoryless round-strand relation
+
+        P'/L = pi a^4/(4 rho) * (dB/dt)^2
+
+    independently at every macro Gauss point, then couples it to transport
+    Joule heating and the same adiabatic enthalpy model used by the finite-
+    diffusion mappers.
+
+    It is an analytical baseline, not the preferred finite-penetration model.
+    """
+
+    def __init__(
+        self,
+        resistivity: ResistivityTable | None = None,
+        pulse: TrapezoidPulse = TrapezoidPulse(),
+        n_strands_total=2432,
+        strand_diameter_m=0.2e-3,
+        aluminum_density_kg_m3=2700.0,
+    ):
+        self.rho = ResistivityTable() if resistivity is None else resistivity
+        self.pulse = pulse
+        self.n_strands_total = int(n_strands_total)
+        self.strand_diameter_m = float(strand_diameter_m)
+        self.A_al_m2 = (
+            self.n_strands_total
+            * np.pi
+            * (self.strand_diameter_m / 2.0) ** 2
+        )
+        self.mass_per_m = aluminum_density_kg_m3 * self.A_al_m2
+        self.enthalpy = EnthalpyModel()
+        self.cp = CompletePenetrationStrand(
+            diameter_m=self.strand_diameter_m
+        )
+
+    def run(
+        self,
+        field_model: FiniteTurnBiotSavart,
+        target_order=2,
+        dt_s=5e-6,
+        initial_temperature_K=4.2,
+        current_peak_A=47.29e3,
+        tail_s=0.0,
+    ):
+        """Run the complete-penetration whole-magnet baseline.
+
+        tail_s is accepted for API symmetry with ModalThermalMapper. Since
+        the complete-penetration model has no magnetic state memory, eddy loss
+        is identically zero after the drive pulse.
+        """
+        s = field_model.turn_gauss_points(target_order)
+        Bpk = s["Bmag_pk_T"].to_numpy(float)
+        weights = s["weight"].to_numpy(float)
+        length = s["turn_length_m"].to_numpy(float)
+
+        Tloc = np.full(len(s), initial_temperature_K)
+        hloc = np.zeros(len(s))
+        Qeddy = np.zeros(len(s))
+        Qj = np.zeros(len(s))
+
+        tend = self.pulse.duration_s + float(tail_s)
+        times = np.arange(0.0, tend + 0.5 * dt_s, dt_s)
+        history = []
+
+        for k in range(len(times) - 1):
+            tm = 0.5 * (times[k] + times[k + 1])
+            g = self.pulse.amplitude(tm)
+            dgdt = self.pulse.derivative(tm)
+            Bnow = Bpk * g
+            dBdt = Bpk * dgdt
+
+            rho = self.rho(Tloc, Bnow)
+            Pstrand = self.cp.power(rho, dBdt)
+            Peddy_per_m = self.n_strands_total * Pstrand
+
+            I = current_peak_A * g
+            Pj_per_m = I**2 * rho / self.A_al_m2
+
+            Qeddy += Peddy_per_m * dt_s
+            Qj += Pj_per_m * dt_s
+            hloc += (
+                (Peddy_per_m + Pj_per_m)
+                * dt_s
+                / self.mass_per_m
+            )
+            Tloc = self.enthalpy.temperature_from_specific_enthalpy(hloc)
+
+            history.append(
+                {
+                    "time_s": tm,
+                    "P_eddy_W": float(
+                        np.sum(Peddy_per_m * weights * length)
+                    ),
+                    "P_transport_W": float(
+                        np.sum(Pj_per_m * weights * length)
+                    ),
+                    "T_mean_K": float(
+                        np.average(Tloc, weights=weights * length)
+                    ),
+                    "T_max_K": float(np.max(Tloc)),
+                }
+            )
+
+        s["Qeddy_local_Jpm"] = Qeddy
+        s["Qtransport_local_Jpm"] = Qj
+        s["Tend_K"] = Tloc
+
+        turn_rows = []
+        for tid, gdf in s.groupby("turn_id"):
+            wt = gdf["weight"].to_numpy(float)
+            L = float(gdf["turn_length_m"].iloc[0])
+            qe = float(np.sum(wt * gdf["Qeddy_local_Jpm"]))
+            qj = float(np.sum(wt * gdf["Qtransport_local_Jpm"]))
+            Tavg = float(np.sum(wt * gdf["Tend_K"]))
+            row = gdf.iloc[0]
+            turn_rows.append(
+                {
+                    "turn_id": int(tid),
+                    "sp_id": int(row.sp_id),
+                    "dp_id": int(row.dp_id),
+                    "radial_layer": int(row.radial_layer),
+                    "r_m": float(row.r_center_m),
+                    "z_m": float(row.z_center_m),
+                    "Qeddy_J": qe * L,
+                    "Qtransport_J": qj * L,
+                    "Qtotal_J": (qe + qj) * L,
+                    "Tavg_end_K": Tavg,
+                    "Tmax_end_K": float(gdf["Tend_K"].max()),
+                }
+            )
+
+        turns = pd.DataFrame(turn_rows)
+        hist = pd.DataFrame(history)
+        summary = MagnetLossSummary(
+            Q_eddy_J=float(turns["Qeddy_J"].sum()),
+            Q_transport_J=float(turns["Qtransport_J"].sum()),
+            Q_total_J=float(turns["Qtotal_J"].sum()),
+            T_mean_end_K=float(
+                np.average(s["Tend_K"], weights=weights * length)
+            ),
+            T_max_end_K=float(s["Tend_K"].max()),
+        )
+        return s, turns, hist, summary
 
 class ModalThermalMapper:
     """Whole-magnet adiabatic mapper with Robin-Bessel magnetic-diffusion memory.
