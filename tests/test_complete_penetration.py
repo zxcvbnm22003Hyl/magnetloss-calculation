@@ -38,3 +38,44 @@ def test_complete_penetration_flat_top_power_is_zero():
     model = CompletePenetrationStrand(diameter_m=0.2e-3)
     p = model.power(rho_ohm_m=1e-9, dBdt_T_s=0.0)
     assert float(p) == 0.0
+
+
+def test_complete_penetration_whole_magnet_mapper_smoke():
+    import pandas as pd
+    from apexloss.whole_magnet import CompletePenetrationThermalMapper
+
+    class DummyField:
+        def turn_gauss_points(self, target_order):
+            assert target_order == 1
+            return pd.DataFrame(
+                {
+                    "turn_id": [1],
+                    "sp_id": [1],
+                    "dp_id": [1],
+                    "radial_layer": [1],
+                    "r_center_m": [0.15],
+                    "z_center_m": [0.0],
+                    "weight": [1.0],
+                    "turn_length_m": [2 * np.pi * 0.15],
+                    "Bmag_pk_T": [10.0],
+                }
+            )
+
+    mapper = CompletePenetrationThermalMapper()
+    samples, turns, history, summary = mapper.run(
+        DummyField(),
+        target_order=1,
+        dt_s=100e-6,
+        initial_temperature_K=4.2,
+        current_peak_A=10e3,
+    )
+
+    assert summary.Q_eddy_J > 0.0
+    assert summary.Q_transport_J > 0.0
+    assert summary.Q_total_J == pytest.approx(
+        summary.Q_eddy_J + summary.Q_transport_J
+    )
+    assert summary.T_max_end_K > 4.2
+    assert len(samples) == 1
+    assert len(turns) == 1
+    assert len(history) > 0
