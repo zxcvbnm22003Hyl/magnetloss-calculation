@@ -6,6 +6,33 @@ A turn occupying a rectangular region in `(r,z)` is decomposed into differential
 
 An even source quadrature order is used to avoid placing a source quadrature node exactly at a turn center during self-field evaluation.
 
+## Complete-penetration analytical baseline
+
+For a round normal-metal strand of radius `a` in a spatially uniform
+transverse field, the complete-penetration approximation uses
+
+```math
+P'_{CP}
+=
+\frac{\pi a^4}{4\rho(B,T)}
+\left(\frac{dB}{dt}\right)^2.
+```
+
+The CP model is memoryless: its instantaneous eddy-current power depends only
+on the current `rho(B,T)` and `dB/dt`. Therefore it predicts zero eddy loss
+during an ideal flat top and after the pulse once `dB/dt=0`.
+
+The dedicated implementation is in:
+
+```text
+src/apexloss/complete_penetration.py
+```
+
+For whole-magnet calculations, `CompletePenetrationThermalMapper` combines
+this analytical strand loss with transport Joule heating, the same RRR3000
+`rho(B,T)` table, and the same adiabatic enthalpy model used by the
+finite-diffusion solvers.
+
 ## Single-strand finite penetration
 
 The radial `m=1` magnetic-diffusion operator is discretized using the original APEX finite-difference formulation. Crank-Nicolson time stepping leads to a tridiagonal linear system solved with `scipy.linalg.solve_banded`.
