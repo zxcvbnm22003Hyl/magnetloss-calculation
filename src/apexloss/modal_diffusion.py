@@ -5,6 +5,7 @@ import numpy as np
 from scipy.special import jn_zeros, jv
 
 from .constants import MU0
+from .complete_penetration import CompletePenetrationStrand
 from .materials import ResistivityTable
 from .waveforms import TrapezoidPulse
 
@@ -113,10 +114,10 @@ class RobinBesselStrand:
 
     @staticmethod
     def complete_penetration_power_W_per_m(radius_m, rho_ohm_m, dBdt_T_s):
-        return (
-            np.pi * float(radius_m) ** 4
-            / (4.0 * np.asarray(rho_ohm_m, dtype=float))
-            * np.asarray(dBdt_T_s, dtype=float) ** 2
+        return CompletePenetrationStrand.power_W_per_m(
+            radius_m,
+            rho_ohm_m,
+            dBdt_T_s,
         )
 
     def simulate_trapezoid(
