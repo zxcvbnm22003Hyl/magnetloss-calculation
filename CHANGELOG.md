@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 — 2026-10-07
+
+- add dedicated complete-penetration analytical strand solver
+- add `whole-magnet --mode cp-thermal` with rho(B,T) and adiabatic feedback
+- add `strand-cp` CLI command
+- add CP regression tests, example and frozen reference results
+- centralize the Robin–Bessel fast-diffusion limit on the CP implementation
+
+
 ## 0.1.1 — 2026-10-05
 
 - add Robin–Bessel finite-penetration modal strand solver
