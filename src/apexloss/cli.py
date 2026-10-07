@@ -6,12 +6,18 @@ from pathlib import Path
 import pandas as pd
 
 from .field import FiniteTurnBiotSavart
+from .complete_penetration import CompletePenetrationStrand
 from .geometry import MagnetGeometry
 from .materials import LegacyKohlerRRR, ResistivityTable
 from .multifilament_fem import MultifilamentFEM
 from .strand_diffusion import SingleStrandDiffusion
 from .surrogate import SecondaryLossSurrogate
-from .whole_magnet import fixed_temperature_loss, QuasiStaticThermalMapper, ModalThermalMapper
+from .whole_magnet import (
+    fixed_temperature_loss,
+    QuasiStaticThermalMapper,
+    CompletePenetrationThermalMapper,
+    ModalThermalMapper,
+)
 
 
 def _write_summary(path, obj):
@@ -44,6 +50,26 @@ def cmd_strand(args):
     _write_summary(args.out, d)
     print(json.dumps(d, indent=2))
 
+
+
+def cmd_strand_cp(args):
+    model = CompletePenetrationStrand(
+        diameter_m=args.diameter_mm * 1e-3
+    )
+    if args.legacy_kohler:
+        rho = LegacyKohlerRRR()
+    else:
+        rho = ResistivityTable()
+    result = model.simulate_trapezoid(
+        B_peak_T=args.Bpk,
+        dt_s=args.dt_us * 1e-6,
+        tail_s=args.tail_ms * 1e-3,
+        temperature_K=args.temperature,
+        resistivity=rho,
+    )
+    d = result.__dict__
+    _write_summary(args.out, d)
+    print(json.dumps(d, indent=2))
 
 def cmd_secondary(args):
     fem = MultifilamentFEM.secondary304(mesh_h_m=args.h_mm * 1e-3, domain_half_m=args.domain_half_mm * 1e-3)
@@ -88,6 +114,23 @@ def cmd_whole(args):
         turns.to_csv(outdir / "turn_loss.csv", index=False)
         hist.to_csv(outdir / "time_history.csv", index=False)
         summary = result.__dict__ | {"mode": "quasistatic-thermal"}
+    elif args.mode == "cp-thermal":
+        mapper = CompletePenetrationThermalMapper()
+        samples, turns, hist, result = mapper.run(
+            field,
+            target_order=args.target_order,
+            dt_s=args.dt_us * 1e-6,
+            initial_temperature_K=args.temperature,
+            current_peak_A=args.current_kA * 1e3,
+            tail_s=args.tail_ms * 1e-3,
+        )
+        samples.to_csv(outdir / "local_samples.csv", index=False)
+        turns.to_csv(outdir / "turn_loss.csv", index=False)
+        hist.to_csv(outdir / "time_history.csv", index=False)
+        summary = result.__dict__ | {
+            "mode": "cp-thermal",
+            "tail_s": args.tail_ms * 1e-3,
+        }
     else:
         mapper = ModalThermalMapper(n_modes=args.n_modes)
         samples, turns, hist, result = mapper.run(
@@ -131,6 +174,19 @@ def build_parser():
     s.add_argument("--out", default="strand_diffusion.json")
     s.set_defaults(func=cmd_strand)
 
+    scp = sub.add_parser(
+        "strand-cp",
+        help="Single-strand complete-penetration analytical baseline",
+    )
+    scp.add_argument("--Bpk", type=float, default=20.619192)
+    scp.add_argument("--temperature", type=float, default=4.2)
+    scp.add_argument("--diameter-mm", type=float, default=0.2)
+    scp.add_argument("--dt-us", type=float, default=1.0)
+    scp.add_argument("--tail-ms", type=float, default=0.0)
+    scp.add_argument("--legacy-kohler", action="store_true")
+    scp.add_argument("--out", default="strand_cp.json")
+    scp.set_defaults(func=cmd_strand_cp)
+
     m = sub.add_parser("secondary-fem", help="Explicit 304-strand 2-D field-only FEM")
     m.add_argument("--Bpk", type=float, default=20.619192)
     m.add_argument("--temperature", type=float, default=4.2)
@@ -142,7 +198,7 @@ def build_parser():
     m.set_defaults(func=cmd_secondary)
 
     w = sub.add_parser("whole-magnet", help="Whole-magnet field-to-loss mapping")
-    w.add_argument("--mode", choices=["fixed", "thermal", "modal-thermal"], default="fixed")
+    w.add_argument("--mode", choices=["fixed", "thermal", "cp-thermal", "modal-thermal"], default="fixed")
     w.add_argument("--temperature", type=float, default=4.2)
     w.add_argument("--current-kA", type=float, default=47.29)
     w.add_argument("--source-order", type=int, default=20)
